@@ -1,11 +1,12 @@
-__author__ = "Brian Fulton-Howard, David Lähnemann, Johannes Köster, Christian Meesters"
+__author__ = "Filip Makosza, Brian Fulton-Howard, David Lähnemann, Johannes Köster, Christian Meesters"
 __copyright__ = (
-    "Copyright 2023, Brian Fulton-Howard, ",
+    "Copyright 2025, Filip Makosza",
+    "Brian Fulton-Howard, ",
     "David Lähnemann, ",
     "Johannes Köster, ",
     "Christian Meesters",
 )
-__email__ = "johannes.koester@uni-due.de"
+__email__ = "fm12@sanger.ac.uk"
 __license__ = "MIT"
 
 import os
@@ -118,18 +119,22 @@ class Executor(RemoteExecutor):
         call = f"bsub -J '{jobname}' -o {lsf_logfile} -e {lsf_logfile} -env all"
 
         call += self.get_project_arg(job)
-        call += self.get_queue_arg(job)
 
+        # save walltime to use for queue selection
+        walltime = None
         if job.resources.get("runtime"):
-            call += f" -W {job.resources.runtime}"
+            walltime = int(job.resources.runtime)
         elif job.resources.get("walltime"):
-            call += f" -W {job.resources.walltime}"
+            walltime = int(job.resources.walltime)
         elif job.resources.get("time_min"):
             if not type(job.resources.time_min) in [int, float]:
                 self.logger.error("time_min must be a number")
             if not job.resources.time_min % 1 == 0:
                 self.logger.error("time_min must be a whole number")
-            call += f" -W {job.resources.time_min}"
+            walltime = int(job.resources.time_min)
+
+        if walltime:
+            call += f" -W {walltime}"
         else:
             self.logger.warning(
                 "No wall time information given. This might or might not "
@@ -150,21 +155,28 @@ class Executor(RemoteExecutor):
         cpus_per_task = max(1, cpus_per_task)
         call += f" -n {cpus_per_task}"
 
+        mem_ = None
         conv_fcts = {"K": 1024, "M": 1, "G": 1 / 1024, "T": 1 / (1024**2)}
         mem_unit = self.lsf_config.get("LSF_UNIT_FOR_LIMITS", "MB")
         conv_fct = conv_fcts[mem_unit[0]]
         if job.resources.get("mem_mb_per_cpu"):
-            mem_ = job.resources.mem_mb_per_cpu * conv_fct
+            mem_ = int(job.resources.mem_mb_per_cpu * conv_fct)
         elif job.resources.get("mem_mb"):
-            mem_ = job.resources.mem_mb * conv_fct / cpus_per_task
+            mem_ = int(job.resources.mem_mb * conv_fct / cpus_per_task)
         else:
             self.logger.warning(
                 "No job memory information ('mem_mb' or 'mem_mb_per_cpu') is given "
                 "- submitting without. This might or might not work on your cluster."
             )
-        if self.lsf_config["LSF_MEMFMT"] == "perjob":
-            mem_ *= cpus_per_task
-        call += f" -R rusage[mem={mem_}]"
+
+        if mem_:
+            if self.lsf_config["LSF_MEMFMT"] == "perjob":
+                mem_ *= int(cpus_per_task)
+            call += f" -M{mem_} -R\"rusage[mem={mem_}] select[mem>{mem_}]\""
+
+        queue = self.get_queue_arg(job, walltime, mem_)
+        if queue != "":
+            call += f" -q {queue}"
 
         # MPI job
         if job.resources.get("mpi", False):
@@ -474,22 +486,76 @@ class Executor(RemoteExecutor):
                     self._fallback_project_arg = ""  # no project specific args for bsub
             return self._fallback_project_arg
 
-    def get_queue_arg(self, job: JobExecutorInterface):
+    def get_queue_arg(self, job: JobExecutorInterface, walltime: int | None, mem: int | None):
         """
-        checks whether the desired queue is valid,
-        returns a default queue, if applicable
-        else raises an error - implicetly.
+        picks a queue for the job, based on, in descending order:
+            1. an explicitly specified queue
+            2. time and memory constraints
+            3. the default queue
         """
+
         if job.resources.get("lsf_queue"):
             queue = job.resources.lsf_queue
-        else:
-            if self._fallback_queue is None:
-                self._fallback_queue = self.get_default_queue(job)
-            queue = self._fallback_queue
-        if queue:
-            return f" -q {queue}"
-        else:
-            return ""
+            return queue
+
+        if walltime and mem:
+            if walltime >= 15*24*60: # 15 days
+                if mem > 680*1000: # 680GB in MB
+                    raise WorkflowError(
+                        f"There is no queue for jobs that need >680 GB and >15 days."
+                    )
+                else:
+                    queue = "basement"
+            elif mem > 720*1000:
+                queue = "teramem"
+            elif mem > 350*1000:
+                queue = "hugemem"
+            elif walltime > 7*24*60:
+                queue = "basement"
+            elif walltime > 2*24*60:
+                queue = "week"
+            elif walltime > 12*60:
+                queue = "long"
+            elif walltime > 60:
+                queue = "normal"
+            else:
+                queue = "small"
+
+            return queue
+
+        if mem and not walltime:
+            if mem > 680*1000: # 680GB in MB
+                raise WorkflowError(
+                    f"There is no queue for jobs that need >680 GB."
+                )
+            elif mem > 720*1000:
+                queue = "teramem"
+            elif mem > 350*1000:
+                queue = "hugemem"
+            else:
+                queue = "normal"
+
+            return queue
+
+        if walltime and not mem:
+            if walltime >= 15*24*60: # 15 days
+                raise WorkflowError(
+                    f"There is no queue for jobs that need >15 days."
+                )
+            elif walltime > 7*24*60:
+                queue = "basement"
+            elif walltime > 2*24*60:
+                queue = "week"
+            elif walltime > 12*60:
+                queue = "long"
+            elif walltime > 60:
+                queue = "normal"
+            else:
+                queue = "small"
+
+            return queue
+
+        return self.get_default_queue(job)
 
     def get_project(self):
         """
