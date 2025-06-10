@@ -239,7 +239,7 @@ class Executor(RemoteExecutor):
         #
         # async with self.status_rate_limiter:
         #    # query remote middleware here
-        fail_stati = ("SSUSP", "EXIT", "USUSP")
+        fail_stati = ("SSUSP", "EXIT", "USUSP", "ZOMBI")
         # Cap sleeping time between querying the status of all active jobs:
         max_sleep_time = 180
 
@@ -305,12 +305,6 @@ class Executor(RemoteExecutor):
                 continue
             status = status_of_jobs[j.external_jobid]
             if status == "DONE":
-                self.report_job_success(j)
-                any_finished = True
-                active_jobs_seen.remove(j.external_jobid)
-            elif status == "UNKWN":
-                # the job probably does not exist anymore, but 'sacct' did not work
-                # so we assume it is finished
                 self.report_job_success(j)
                 any_finished = True
                 active_jobs_seen.remove(j.external_jobid)
