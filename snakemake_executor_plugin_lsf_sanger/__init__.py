@@ -493,7 +493,7 @@ class Executor(RemoteExecutor):
             return queue
 
         if walltime and mem:
-            if walltime >= 15*24*60: # 15 days
+            if walltime >= 15*24*60: # 15 days in minutes
                 if mem > 680*1000: # 680GB in MB
                     raise WorkflowError(
                         f"There is no queue for jobs that need >680 GB and >15 days."
@@ -510,7 +510,7 @@ class Executor(RemoteExecutor):
                 queue = "week"
             elif walltime > 12*60:
                 queue = "long"
-            elif walltime > 60:
+            elif walltime > 1:
                 queue = "normal"
             else:
                 queue = "small"
@@ -542,7 +542,7 @@ class Executor(RemoteExecutor):
                 queue = "week"
             elif walltime > 12*60:
                 queue = "long"
-            elif walltime > 60:
+            elif walltime > 1:
                 queue = "normal"
             else:
                 queue = "small"
