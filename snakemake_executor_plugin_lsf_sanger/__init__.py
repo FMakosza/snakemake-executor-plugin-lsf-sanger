@@ -518,9 +518,9 @@ class Executor(RemoteExecutor):
             return queue
 
         if mem and not walltime:
-            if mem > 680*1000: # 680GB in MB
+            if mem > 3000*1000: # 3TB in MB
                 raise WorkflowError(
-                    f"There is no queue for jobs that need >680 GB."
+                    f"There is no queue for jobs that need >3 TB."
                 )
             elif mem > 720*1000:
                 queue = "teramem"
@@ -532,9 +532,9 @@ class Executor(RemoteExecutor):
             return queue
 
         if walltime and not mem:
-            if walltime >= 15*24*60: # 15 days
+            if walltime >= 30*24*60: # 30 days
                 raise WorkflowError(
-                    f"There is no queue for jobs that need >15 days."
+                    f"There is no queue for jobs that need >30 days."
                 )
             elif walltime > 7*24*60:
                 queue = "basement"
