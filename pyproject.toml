@@ -1,8 +1,9 @@
 [tool.poetry]
 name = "snakemake-executor-plugin-lsf-sanger"
-version = "0.2.6"
-description = "A Snakemake executor plugin for submitting jobs to a LSF cluster."
+version = "1.0.0"
+description = "A Snakemake executor plugin for submitting jobs to the Sanger LSF cluster."
 authors = [
+    "Filip Makosza <fm12@sanger.ac.uk>",
     "Brian Fulton-Howard <brian.fulton-howard@mssm.edu>",
     "Christian Meesters <meesters@uni-mainz.de>",
     "David Lähnemann <david.laehnemann@dkfz-heidelberg.de>",
@@ -12,7 +13,7 @@ readme = "README.md"
 license = "MIT"
 repository = "https://github.com/befh/snakemake-executor-plugin-lsf"
 documentation = "https://snakemake.github.io/snakemake-plugin-catalog/plugins/executor/lsf.html"
-keywords = ["snakemake", "plugin", "executor", "cluster", "lsf"]
+keywords = ["snakemake", "plugin", "executor", "cluster", "lsf", "sanger"]
 
 [tool.poetry.dependencies]
 python = "^3.11"

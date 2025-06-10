@@ -9,7 +9,7 @@
     {% set pyver = '==' + deps['python'] %}
 {% endif %}
 package:
-  name: snakemake-executor-plugin-lsf
+  name: snakemake-executor-plugin-lsf-sanger
   version: {{ poetry['version'] }}
 
 source:

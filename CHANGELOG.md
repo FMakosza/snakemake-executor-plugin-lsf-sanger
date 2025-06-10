@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.0
+
+* If the user doesn't provide a queue explicitly, infer it from time and memory requirements
+* Treat `ZOMBI` as a fail state
+* Wait on `UNKWN` jobs instead of marking them as finished
+
 ## [0.2.0](https://github.com/snakemake/snakemake-executor-plugin-slurm/compare/v0.2.1...v0.2.2) (2024-02-01)
 
 

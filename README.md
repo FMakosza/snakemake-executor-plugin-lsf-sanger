@@ -1,29 +1,23 @@
-# Snakemake executor plugin: LSF
+# Snakemake executor plugin: LSF-Sanger
 
 [LSF](https://www.ibm.com/docs/en/spectrum-lsf/) is common high performance
-computing batch system.
+computing batch system. This is a version of the [generic LSF executor plugin](https://github.com/BEFH/snakemake-executor-plugin-lsf) modified to better integrate with the Sanger compute environment and simplify pipeline execution.
 
 ## Specifying Project and Queue
 
-LSF clusters can have mandatory resource indicators for
-accounting and scheduling, [Project]{.title-ref} and
-[Queue]{.title-ref}, respectivily. These resources are usually
-omitted from Snakemake workflows in order to keep the workflow
-definition independent from the platform. However, it is also possible
-to specify them inside of the workflow as resources in the rule
-definition (see `snakefiles-resources`{.interpreted-text role="ref"}).
+LSF clusters can have mandatory resource indicators for accounting and scheduling, Project and Queue, respectively. These resources are usually omitted from Snakemake workflows in order to keep the workflow definition independent from the platform. However, it is also possible to specify them inside of the workflow as resources in the rule definition (see the [Resources](https://snakemake.readthedocs.io/en/stable/snakefiles/rules.html#resources) document).
 
 To specify them at the command line, define them as default resources:
 
 ``` console
-$ snakemake --executor lsf --default-resources lsf_project=<your LSF project> lsf_queue=<your LSF queue>
+$ snakemake --executor lsf-sanger --default-resources lsf_project=<your LSF project> lsf_queue=<your LSF queue>
 ```
 
 If individual rules require e.g. a different queue, you can override
 the default per rule:
 
 ``` console
-$ snakemake --executor lsf --default-resources lsf_project=<your LSF project> lsf_queue=<your LSF queue> --set-resources <somerule>:lsf_queue=<some other queue>
+$ snakemake --executor lsf-sanger --default-resources lsf_project=<your LSF project> lsf_queue=<your LSF queue> --set-resources <somerule>:lsf_queue=<some other queue>
 ```
 
 Usually, it is advisable to persist such settings via a
@@ -34,7 +28,7 @@ This is an example of the relevant profile settings:
 
 ```yaml
 jobs: '<max concurrent jobs>'
-executor: lsf
+executor: lsf-sanger
 default-resources:
   - 'lsf_project=<your LSF project>'
   - 'lsf_queue=<your LSF queue>'
@@ -65,7 +59,7 @@ defaults built in, which are automatically activated when using any non-local ex
 ## MPI jobs
 
 Snakemake\'s LSF backend also supports MPI jobs, see
-`snakefiles-mpi`{.interpreted-text role="ref"} for details.
+the [MPI support document](https://snakemake.readthedocs.io/en/stable/snakefiles/rules.html#mpi-support) for details.
 
 ``` python
 rule calc_pi:
