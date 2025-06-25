@@ -3,6 +3,8 @@
 [LSF](https://www.ibm.com/docs/en/spectrum-lsf/) is common high performance
 computing batch system. This is a version of the [generic LSF executor plugin](https://github.com/BEFH/snakemake-executor-plugin-lsf) modified to better integrate with the Sanger compute environment and simplify pipeline execution.
 
+Rule time and memory requirements are used to select an appropriate farm queue automatically.
+
 ## Specifying Project and Queue
 
 LSF clusters can have mandatory resource indicators for accounting and scheduling, Project and Queue, respectively. These resources are usually omitted from Snakemake workflows in order to keep the workflow definition independent from the platform. However, it is also possible to specify them inside of the workflow as resources in the rule definition (see the [Resources](https://snakemake.readthedocs.io/en/stable/snakefiles/rules.html#resources) document).
