@@ -23,7 +23,7 @@ snakemake-executor-plugin-lsf-jobstep = "^0.1.10"
 throttler = "^1.2.2"
 
 [tool.poetry.group.dev.dependencies]
-black = "^23.7.0"
+black = "^25.1.0"
 flake8 = "^6.1.0"
 coverage = "^7.3.1"
 pytest = "^7.4.2"
