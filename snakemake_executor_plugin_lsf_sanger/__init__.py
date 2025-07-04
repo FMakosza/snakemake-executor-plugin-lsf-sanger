@@ -556,7 +556,7 @@ class Executor(RemoteExecutor):
         tries to deduce the project from recent jobs,
         returns None, if none is found
         """
-        cmd = "bhist -l -a | grep Project"
+        cmd = "bhist -l -a -UF | grep Project"
         try:
             bhist_out = subprocess.check_output(
                 cmd, shell=True, text=True, stderr=subprocess.PIPE
