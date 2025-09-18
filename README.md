@@ -3,7 +3,9 @@
 [LSF](https://www.ibm.com/docs/en/spectrum-lsf/) is common high performance
 computing batch system. This is a version of the [generic LSF executor plugin](https://github.com/BEFH/snakemake-executor-plugin-lsf) modified to better integrate with the Sanger compute environment and simplify pipeline execution.
 
-Rule time and memory requirements are used to select an appropriate farm queue automatically.
+Rule time and memory requirements are used to select an appropriate farm queue automatically, following the same criteria as the [Sanger Nextflow profile](https://nf-co.re/configs/sanger/).
+
+The following readme is largely preserved from the original LSF executor plugin. `lsf-sanger` users do not have to specify queues for rules which specify the resources they need.
 
 ## Specifying Project and Queue
 
