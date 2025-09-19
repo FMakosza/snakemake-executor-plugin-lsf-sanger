@@ -7,6 +7,15 @@ Rule time and memory requirements are used to select an appropriate farm queue a
 
 The following readme is largely preserved from the original LSF executor plugin. `lsf-sanger` users do not have to specify queues for rules which specify the resources they need.
 
+## Installation
+
+To use the `lsf-sanger` executor, install the latest release into the same Python environment as Snakemake.
+
+```
+$ source venv/bin/activate
+(venv) $ pip install https://github.com/FMakosza/snakemake-executor-plugin-lsf-sanger/archive/refs/tags/[VERSION].tar.gz
+```
+
 ## Specifying Project and Queue
 
 LSF clusters can have mandatory resource indicators for accounting and scheduling, Project and Queue, respectively. These resources are usually omitted from Snakemake workflows in order to keep the workflow definition independent from the platform. However, it is also possible to specify them inside of the workflow as resources in the rule definition (see the [Resources](https://snakemake.readthedocs.io/en/stable/snakefiles/rules.html#resources) document).
