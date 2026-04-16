@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.0
+
+* Merged upstream `snakemake-executor-plugin-lsf` changes from version 0.2.6 to 0.3.2
+
+## 1.0.1
+
+* Added -UF flag to bhist command to avoid errors when the group string is broken across multiple lines
+
 ## 1.0.0
 
 * If the user doesn't provide a queue explicitly, infer it from time and memory requirements

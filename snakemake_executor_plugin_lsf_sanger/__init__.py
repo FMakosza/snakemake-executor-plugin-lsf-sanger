@@ -13,18 +13,18 @@ import os
 import re
 import subprocess
 import time
-from typing import List, Generator
+from typing import List, AsyncGenerator
 from collections import Counter
 import uuid
 import math
 from snakemake_interface_executor_plugins.executors.base import SubmittedJobInfo
 from snakemake_interface_executor_plugins.executors.remote import RemoteExecutor
 from snakemake_interface_executor_plugins.settings import CommonSettings
-from snakemake_interface_executor_plugins.jobs import (
-    JobExecutorInterface,
-)
+from snakemake_interface_executor_plugins.jobs import JobExecutorInterface
 from snakemake_interface_common.exceptions import WorkflowError
-
+import snakemake.resources
+from humanfriendly import InvalidTimespan
+import shlex
 
 # Required:
 # Specify common settings shared by various executors.
@@ -58,15 +58,6 @@ class Executor(RemoteExecutor):
         self._fallback_project_arg = None
         self._fallback_queue = None
         self.lsf_config = self.get_lsf_config()
-
-    def additional_general_args(self):
-        # we need to set -j to 1 here, because the behaviour
-        # of snakemake is to submit all jobs at once, otherwise.
-        # However, the LSF Executor is supposed to submit jobs
-        # one after another, so we need to set -j to 1 for the
-        # JobStep Executor, which in turn handles the launch of
-        # LSF jobsteps.
-        return "--executor lsf-jobstep --jobs 1"
 
     def run_job(self, job: JobExecutorInterface):
         # Implement here how to run a job.
@@ -124,6 +115,8 @@ class Executor(RemoteExecutor):
         walltime = None
         if job.resources.get("runtime"):
             walltime = int(job.resources.runtime)
+        elif job.resources.get("time"):
+            walltime = int(job.resources.time)
         elif job.resources.get("walltime"):
             walltime = int(job.resources.walltime)
         elif job.resources.get("time_min"):
@@ -143,47 +136,15 @@ class Executor(RemoteExecutor):
                 "default via --default-resources."
             )
 
-        cpus_per_task = job.threads
-        if job.resources.get("cpus_per_task"):
-            if not isinstance(cpus_per_task, int):
-                raise WorkflowError(
-                    f"cpus_per_task must be an integer, but is {cpus_per_task}"
-                )
-            cpus_per_task = job.resources.cpus_per_task
-        # ensure that at least 1 cpu is requested
-        # because 0 is not allowed by LSF
-        cpus_per_task = max(1, cpus_per_task)
-        call += f" -n {cpus_per_task}"
-
-        mem_ = None
-        conv_fcts = {"K": 1024, "M": 1, "G": 1 / 1024, "T": 1 / (1024**2)}
-        mem_unit = self.lsf_config.get("LSF_UNIT_FOR_LIMITS", "MB")
-        conv_fct = conv_fcts[mem_unit[0]]
-        if job.resources.get("mem_mb_per_cpu"):
-            mem_ = int(job.resources.mem_mb_per_cpu * conv_fct)
-        elif job.resources.get("mem_mb"):
-            mem_ = int(job.resources.mem_mb * conv_fct / cpus_per_task)
-        else:
-            self.logger.warning(
-                "No job memory information ('mem_mb' or 'mem_mb_per_cpu') is given "
-                "- submitting without. This might or might not work on your cluster."
-            )
-
+        call += f" -n {self.get_cpus(job)}"
+        mem_ = self.get_mem(job)
         if mem_:
-            if self.lsf_config["LSF_MEMFMT"] == "perjob":
-                mem_ *= int(cpus_per_task)
             call += f" -M{mem_} -R\"rusage[mem={mem_}] select[mem>{mem_}]\""
+        call += f" -R span[{self.get_span(job)}]"
 
         queue = self.get_queue_arg(job, walltime, mem_)
         if queue != "":
             call += f" -q {queue}"
-
-        # MPI job
-        if job.resources.get("mpi", False):
-            if job.resources.get("ptile", False):
-                call += f" -R span[ptile={job.resources.get('ptile', 1)}]"
-        else:
-            call += " -R span[hosts=1]"
 
         if job.resources.get("lsf_extra", False):
             call += f" {job.resources.get('lsf_extra')}"
@@ -224,7 +185,7 @@ class Executor(RemoteExecutor):
 
     async def check_active_jobs(
         self, active_jobs: List[SubmittedJobInfo]
-    ) -> Generator[SubmittedJobInfo, None, None]:
+    ) -> AsyncGenerator[SubmittedJobInfo, None]:
         # Check the status of active jobs.
 
         # You have to iterate over the given list active_jobs.
@@ -239,7 +200,7 @@ class Executor(RemoteExecutor):
         #
         # async with self.status_rate_limiter:
         #    # query remote middleware here
-        fail_stati = ("SSUSP", "EXIT", "USUSP", "ZOMBI")
+        fail_stati = ("EXIT", "USUSP", "PSUSP", "ZOMBI", "SSUSP")
         # Cap sleeping time between querying the status of all active jobs:
         max_sleep_time = 180
 
@@ -254,7 +215,18 @@ class Executor(RemoteExecutor):
 
         for i in range(status_attempts):
             async with self.status_rate_limiter:
-                (status_of_jobs, job_query_duration) = await self.job_stati_bjobs()
+                status_of_jobs, job_query_duration = await self.job_stati_bjobs()
+                self.logger.debug(
+                    f"Checking job statuses, attempt {i}: "
+                    f"status_of_jobs={status_of_jobs}, "
+                    f"query_duration={job_query_duration}"
+                )
+                if status_of_jobs is None or job_query_duration is None:
+                    self.logger.debug(
+                        f"Could not check status of job {self.run_uuid}. "
+                        "See error above."
+                    )
+                    continue
                 job_query_durations.append(job_query_duration)
                 self.logger.debug(f"status_of_jobs after bjobs is: {status_of_jobs}")
                 # only take jobs that are still active
@@ -354,6 +326,8 @@ class Executor(RemoteExecutor):
 
         statuses_all = []
 
+        res = query_duration = None
+
         try:
             running_cmd = f"bjobs -noheader -o 'jobid stat' -aJ '*{uuid}*'"
             time_before_query = time.time()
@@ -376,7 +350,8 @@ class Executor(RemoteExecutor):
             )
             pass
 
-        res = {x[0]: x[1] for x in statuses_all}
+        if len(statuses_all) > 0:
+            res = {x[0]: x[1] for x in statuses_all}
 
         return (res, query_duration)
 
@@ -454,6 +429,68 @@ class Executor(RemoteExecutor):
 
         return (res, query_duration)
 
+    def get_cpus(self, job: JobExecutorInterface):
+        """
+        Gets the LSF cpu request amount for the job.
+        """
+        cpus_total = job.threads
+        if job.resources.get("cpus_per_task"):
+            cpus_per_task = job.resources.cpus_per_task
+            if not isinstance(cpus_per_task, int):
+                raise WorkflowError(
+                    f"cpus_per_task must be an integer, but is {cpus_per_task}"
+                )
+            cpus_total = cpus_per_task
+        # ensure that at least 1 cpu is requested
+        # because 0 is not allowed by LSF
+        return max(1, cpus_total)
+
+    def get_mem(self, job: JobExecutorInterface):
+        """
+        Gets the LSF memory request amount for the job.
+        Sanger farm allocates memory per-host by default.
+        """
+        conv_fcts = {"K": 1024, "M": 1, "G": 1 / 1024, "T": 1 / (1024**2)}
+        mem_unit = self.lsf_config.get("LSF_UNIT_FOR_LIMITS", "MB")
+        conv_fct = conv_fcts[mem_unit[0]]
+        cpus_total = self.get_cpus(job)
+        if job.resources.get("mem_mb_per_cpu"):
+            mem_ = job.resources.mem_mb_per_cpu * conv_fct * cpus_total
+        elif job.resources.get("mem_mb"):
+            mem_ = job.resources.mem_mb * conv_fct
+        else:
+            self.logger.warning(
+                "No job memory information ('mem_mb' or 'mem_mb_per_cpu') is given "
+                "- submitting without. This might or might not work on your cluster."
+            )
+            mem_ = None
+        return int(mem_)
+
+    def get_span(self, job: JobExecutorInterface):
+        """
+        Gets the LSF span string for the job
+        """
+        # MPI job
+        if job.resources.get("mpi", False):
+            if job.resources.get("span", False):
+                span = job.resources.get("span")
+            elif job.resources.get("ptile", False):
+                span = f"ptile={job.resources.get('ptile')}"
+            elif job.resources.get("cpus_per_node", False):
+                span = f"ptile={job.resources.get('cpus_per_node')}"
+
+            # validate that span is a valid LSF span
+            # https://www.ibm.com/docs/en/spectrum-lsf/10.1.0?topic=strings-span-string
+            # There is no support here for the 'tasks' because LSF only has a concept of
+            # total cores and not the Slurm tasks.
+            # We have implemented cpus_per_node to use ptile for cores per host.
+            valid_span = r"^ptile=(('!'|\w+:\d+|\d+),?)+|hosts=\d+|stripe(=\d+)?$"
+            if not re.match(valid_span, span):
+                raise WorkflowError(f"Invalid span: {span}")
+        else:
+            span = "hosts=1"
+        return span
+
     def get_project_arg(self, job: JobExecutorInterface):
         """
         checks whether the desired project is valid,
@@ -461,10 +498,7 @@ class Executor(RemoteExecutor):
         else raises an error - implicetly.
         """
         if job.resources.get("lsf_project"):
-            # here, we check whether the given or guessed project is valid
-            # if not, a WorkflowError is raised
-            # self.test_project(job.resources.lsf_project)
-            # disabled because I do not know how to do this
+            # No current way to check if the project is valid
             return f" -P {job.resources.lsf_project}"
         else:
             if self._fallback_project_arg is None:
@@ -479,6 +513,69 @@ class Executor(RemoteExecutor):
                     )
                     self._fallback_project_arg = ""  # no project specific args for bsub
             return self._fallback_project_arg
+
+    def process_time(self, time) -> str | int:
+        """
+        Convert a time specification to minutes (integer).
+
+        Supports:
+        - Numeric values (assumed to be in minutes): 120, 120.5
+        - Snakemake-style time strings: "6d", "12h", "30m", "90s", "2d12h30m"
+        - SLURM time formats:
+            - "minutes" (e.g., "60")
+            - "minutes:seconds" (interpreted as hours:minutes, e.g., "60:30")
+            - "hours:minutes:seconds" (e.g., "1:30:45")
+            - "days-hours" (e.g., "2-12")
+            - "days-hours:minutes" (e.g., "2-12:30")
+            - "days-hours:minutes:seconds" (e.g., "2-12:30:45")
+
+        Args:
+            time: Time specification as string, int, or float
+
+        Returns:
+            Time in minutes as integer (fractional minutes are rounded)
+            Initial string if it cannot be parsed as a time specification
+
+        """
+
+        # Return rounded up if numeric
+        if isinstance(time, (int, float)):
+            return math.ceil(time)
+
+        # otherwise cooerce to string and strip
+        time_str = str(time).strip()
+
+        # Try to parse as plain number first
+        try:
+            return math.ceil(float(time_str))
+        except ValueError:
+            pass
+
+        # Try to parse as Snakemake time
+        try:
+            return math.ceil(snakemake.resources.parse_timespan(time_str) / 60)
+        except InvalidTimespan:
+            pass
+
+        # Try to parse as Slurm time format or colon-separated format
+        slurm = re.compile(r"^(\d+)-(\d+)(?::(\d{2}))?(?::(\d{2}(?:\.\d+)?))?$")
+        colon = re.compile(r"^(?:(\d+):)?(\d+):(\d{2}(?:\.\d+)?)$")
+
+        if match := slurm.match(time_str):
+            d, h, m, s = (float(x or 0) for x in match.groups())
+        elif match := colon.match(time_str):
+            h, m, s = (float(x or 0) for x in match.groups())
+            d = 0
+            if re.match(r"^\d+:\d\d$", time_str):
+                self.logger.warning(
+                    "Assuming min:sec for compatibility with other "
+                    "executors, despite LSF using hours and minutes."
+                )
+        else:
+            self.logger.warning("time is not parsable. Passing as trimmed string.")
+            return shlex.quote(time_str)
+
+        return math.ceil(d * 1440 + h * 60 + m + s / 60)
 
     def get_queue_arg(self, job: JobExecutorInterface, walltime: int | None, mem: int | None):
         """
@@ -597,7 +694,7 @@ class Executor(RemoteExecutor):
         lsf_config_tuples = [tuple(x.strip().split(" = ")) for x in lsf_config_lines]
         lsf_config = {x[0]: x[1] for x in lsf_config_tuples[1:]}
         clusters = subprocess.run(
-            "lsclusters", shell=True, capture_output=True, text=True
+            ["lsclusters", "-w"], shell=True, capture_output=True, text=True
         )
         lsf_config["LSF_CLUSTER"] = clusters.stdout.split("\n")[1].split()[0]
         lsf_config["LSB_EVENTS"] = (

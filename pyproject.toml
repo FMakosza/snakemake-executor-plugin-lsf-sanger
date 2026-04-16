@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "snakemake-executor-plugin-lsf-sanger"
-version = "1.0.0"
+version = "1.1.0"
 description = "A Snakemake executor plugin for submitting jobs to the Sanger LSF cluster."
 authors = [
     "Filip Makosza <fm12@sanger.ac.uk>",
@@ -19,7 +19,7 @@ keywords = ["snakemake", "plugin", "executor", "cluster", "lsf", "sanger"]
 python = "^3.11"
 snakemake-interface-common = "^1.17.1"
 snakemake-interface-executor-plugins = "^9.0.0"
-snakemake-executor-plugin-lsf-jobstep = "^0.1.10"
+snakemake = "^9.0.0"
 throttler = "^1.2.2"
 
 [tool.poetry.group.dev.dependencies]
