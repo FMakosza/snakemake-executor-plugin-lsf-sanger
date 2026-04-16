@@ -119,7 +119,7 @@ rule:
     input: ...
     output: ...
     resources:
-        partition: <partition name>
+        lsf_queue: <queue name>
         walltime: <some number>
 ```
 
@@ -149,11 +149,11 @@ rule myrule:
 
 Again, rather use a [profile](https://snakemake.readthedocs.io/en/latest/executing/cli.html#profiles) to specify such resources.
 
-## Clusters that use per-job memory requests instead of per-core
+## Per-job vs per-core
 
-By default, this plugin converts the specified memory request into the per-core request expected by most LSF clusters.
-So `threads: 4` and `mem_mb=128` will result in `-R rusage[mem=32]`. If the request should be per-job on your cluster
-(i.e. `-R rusage[mem=<mem_mb>]`) then set the environment variable `SNAKEMAKE_LSF_MEMFMT` to `perjob`.
+By default, this plugin keeps the specified memory request as a per-job, as expected by the Sanger LSF cluster.
+If for some reason you want the request to be per-CPU core (i.e. `-R rusage[mem=<mem_mb/threads>]`) then set the
+environment variable `SNAKEMAKE_LSF_MEMFMT` to `percpu`.
 
 The executor automatically detects the request unit from cluster configuration, so if your cluster does not use MB,
 you do not need to do anything.
