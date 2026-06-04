@@ -142,7 +142,7 @@ class Executor(RemoteExecutor):
             call += f" -M{mem_} -R\"rusage[mem={mem_}] select[mem>{mem_}]\""
         call += f" -R span[{self.get_span(job)}]"
 
-        queue = self.get_queue_arg(job, walltime, mem_)
+        queue = self.get_queue_arg(job, walltime, mem_, self.lsf_config["LSF_CLUSTER"])
         if queue != "":
             call += f" -q {queue}"
 
@@ -577,52 +577,54 @@ class Executor(RemoteExecutor):
 
         return math.ceil(d * 1440 + h * 60 + m + s / 60)
 
-    def get_queue_arg(self, job: JobExecutorInterface, walltime: int | None, mem: int | None):
+    def get_queue_arg(self, job: JobExecutorInterface, walltime: int | None, mem: int | None, cluster: str):
         """
         picks a queue for the job, based on, in descending order:
             1. an explicitly specified queue
             2. time and memory constraints
             3. the default queue
         """
+        queue = None
 
         if job.resources.get("lsf_queue"):
             queue = job.resources.lsf_queue
             return queue
 
+        queue = self.get_standard_cluster_queue(walltime, mem)
+
+        if queue is None:
+            queue = self.get_default_queue(job)
+
+        return queue
+
+    def get_standard_cluster_queue(self, walltime: int | None, mem: int | None):
         if walltime and mem:
-            if walltime >= 15*24*60: # 15 days in minutes
-                if mem > 680*1000: # 680GB in MB
-                    raise WorkflowError(
-                        f"There is no queue for jobs that need >680 GB and >15 days."
-                    )
-                else:
-                    queue = "basement"
-            elif mem > 720*1000:
-                queue = "teramem"
-            elif mem > 350*1000:
-                queue = "hugemem"
-            elif walltime > 7*24*60:
+            if walltime >= 30*24*60: # 30 days in minutes
+                raise WorkflowError(
+                    "There is no queue for jobs that need >30 days to run."
+                )
+            elif walltime > 7*24*60 and mem < 683*1000: # 683GB in MB
                 queue = "basement"
+            elif mem > 683*1000:
+                # large-memory has same time limit as basement but fewer slots, so
+                # prioritise basement
+                queue = "large-memory"
             elif walltime > 2*24*60:
                 queue = "week"
             elif walltime > 12*60:
                 queue = "long"
-            elif walltime > 1:
-                queue = "normal"
             else:
-                queue = "small"
+                queue = "normal"
 
             return queue
 
         if mem and not walltime:
-            if mem > 3000*1000: # 3TB in MB
+            if mem > 2250*1000: # 2.25TB in MB
                 raise WorkflowError(
-                    f"There is no queue for jobs that need >3 TB."
+                    "There is no queue for jobs that need >2.25 TB."
                 )
-            elif mem > 720*1000:
-                queue = "teramem"
-            elif mem > 350*1000:
-                queue = "hugemem"
+            elif mem > 683*1000:
+                queue = "large-memory"
             else:
                 queue = "normal"
 
@@ -631,7 +633,7 @@ class Executor(RemoteExecutor):
         if walltime and not mem:
             if walltime >= 30*24*60: # 30 days
                 raise WorkflowError(
-                    f"There is no queue for jobs that need >30 days."
+                    "There is no queue for jobs that need >30 days to run."
                 )
             elif walltime > 7*24*60:
                 queue = "basement"
@@ -639,14 +641,12 @@ class Executor(RemoteExecutor):
                 queue = "week"
             elif walltime > 12*60:
                 queue = "long"
-            elif walltime > 1:
-                queue = "normal"
             else:
-                queue = "small"
+                queue = "normal"
 
             return queue
 
-        return self.get_default_queue(job)
+        return None
 
     def get_project(self):
         """
