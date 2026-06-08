@@ -645,7 +645,7 @@ class Executor(RemoteExecutor):
             return queue
 
         if mem and not walltime:
-            elif mem > 683*1000:
+            if mem > 683*1000:
                 queue = "large-memory"
             else:
                 queue = "normal"
