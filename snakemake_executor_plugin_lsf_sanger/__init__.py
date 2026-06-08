@@ -148,7 +148,7 @@ class Executor(RemoteExecutor):
             if gpus == 1:
                 call += ' -gpu "num=1"'
             if gpus > 1:
-                call += f" -R \"select[ngpus>0] rusage[ngpus_physical={gpus}]\" -gpu \"num={gpus}:mode=exclusive_process:aff=no\""
+                call += f" -R \"select[ngpus>0] rusage[ngpus_physical={gpus}]\" -gpu \"mode=exclusive_process:aff=no\""
 
         queue = self.get_queue_arg(job, walltime, mem_, gpus, self.lsf_config["LSF_CLUSTER"])
         if queue != "":
