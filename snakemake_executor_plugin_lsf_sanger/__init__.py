@@ -632,9 +632,9 @@ class Executor(RemoteExecutor):
             if walltime > 7*24*60 and mem < 683*1000: # 683GB in MB
                 queue = "basement"
             elif mem > 683*1000:
-                # large-memory has same time limit as basement but fewer slots, so
+                # hugemem has same time limit as basement but fewer slots, so
                 # prioritise basement
-                queue = "large-memory"
+                queue = "hugemem"
             elif walltime > 2*24*60:
                 queue = "week"
             elif walltime > 12*60:
@@ -646,7 +646,7 @@ class Executor(RemoteExecutor):
 
         if mem and not walltime:
             if mem > 683*1000:
-                queue = "large-memory"
+                queue = "hugemem"
             else:
                 queue = "normal"
 
