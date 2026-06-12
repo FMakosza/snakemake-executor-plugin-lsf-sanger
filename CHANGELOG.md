@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.0
+
+* Updated queue selection to match refactoring
+* Added GPU resource support
+
 ## 1.1.0
 
 * Merged upstream `snakemake-executor-plugin-lsf` changes from version 0.2.6 to 0.3.2
