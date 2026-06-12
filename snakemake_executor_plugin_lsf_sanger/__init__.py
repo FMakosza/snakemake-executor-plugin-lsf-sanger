@@ -142,7 +142,15 @@ class Executor(RemoteExecutor):
             call += f" -M{mem_} -R\"rusage[mem={mem_}] select[mem>{mem_}]\""
         call += f" -R span[{self.get_span(job)}]"
 
-        queue = self.get_queue_arg(job, walltime, mem_)
+        gpus = None
+        if job.resources.get("gpu"):
+            gpus = int(job.resources.get("gpu"))
+            if gpus == 1:
+                call += ' -gpu "num=1"'
+            if gpus > 1:
+                call += f" -R \"select[ngpus>0] rusage[ngpus_physical={gpus}]\" -gpu \"mode=exclusive_process:aff=no\""
+
+        queue = self.get_queue_arg(job, walltime, mem_, gpus, self.lsf_config["LSF_CLUSTER"])
         if queue != "":
             call += f" -q {queue}"
 
@@ -577,51 +585,67 @@ class Executor(RemoteExecutor):
 
         return math.ceil(d * 1440 + h * 60 + m + s / 60)
 
-    def get_queue_arg(self, job: JobExecutorInterface, walltime: int | None, mem: int | None):
+    def get_queue_arg(self, job: JobExecutorInterface, walltime: int | None, mem: int | None, gpus: int | None, cluster: str):
         """
         picks a queue for the job, based on, in descending order:
             1. an explicitly specified queue
             2. time and memory constraints
             3. the default queue
         """
+        queue = None
 
         if job.resources.get("lsf_queue"):
             queue = job.resources.lsf_queue
             return queue
 
+        if cluster == "cub22":
+            queue = self.get_cub22_cluster_queue(walltime, mem, gpus)
+        elif cluster == "tiger22":
+            queue = self.get_tiger22_cluster_queue(walltime, mem, gpus)
+        else:
+            queue = self.get_standard_cluster_queue(walltime, mem, gpus)
+
+        if queue is None:
+            queue = self.get_default_queue(job)
+
+        return queue
+
+    def get_standard_cluster_queue(self, walltime: int | None, mem: int | None, gpus: int | None):
+        if walltime >= 30*24*60: # 30 days in minutes
+            raise WorkflowError(
+                "There is no queue for jobs that need >30 days to run."
+            )
+        if mem > 2250*1000: # 2.25TB in MB
+            raise WorkflowError(
+                "There is no queue for jobs that need >2.25 TB."
+            )
+
+        if gpus:
+            if walltime > 7*24*60:
+                queue = "gpu-basement"
+            else:
+                queue = "gpu"
+
+            return queue
+
         if walltime and mem:
-            if walltime >= 15*24*60: # 15 days in minutes
-                if mem > 680*1000: # 680GB in MB
-                    raise WorkflowError(
-                        f"There is no queue for jobs that need >680 GB and >15 days."
-                    )
-                else:
-                    queue = "basement"
-            elif mem > 720*1000:
-                queue = "teramem"
-            elif mem > 350*1000:
-                queue = "hugemem"
-            elif walltime > 7*24*60:
+            if walltime > 7*24*60 and mem < 683*1000: # 683GB in MB
                 queue = "basement"
+            elif mem > 683*1000:
+                # hugemem has same time limit as basement but fewer slots, so
+                # prioritise basement
+                queue = "hugemem"
             elif walltime > 2*24*60:
                 queue = "week"
             elif walltime > 12*60:
                 queue = "long"
-            elif walltime > 1:
-                queue = "normal"
             else:
-                queue = "small"
+                queue = "normal"
 
             return queue
 
         if mem and not walltime:
-            if mem > 3000*1000: # 3TB in MB
-                raise WorkflowError(
-                    f"There is no queue for jobs that need >3 TB."
-                )
-            elif mem > 720*1000:
-                queue = "teramem"
-            elif mem > 350*1000:
+            if mem > 683*1000:
                 queue = "hugemem"
             else:
                 queue = "normal"
@@ -629,24 +653,42 @@ class Executor(RemoteExecutor):
             return queue
 
         if walltime and not mem:
-            if walltime >= 30*24*60: # 30 days
-                raise WorkflowError(
-                    f"There is no queue for jobs that need >30 days."
-                )
-            elif walltime > 7*24*60:
+            if walltime > 7*24*60:
                 queue = "basement"
             elif walltime > 2*24*60:
                 queue = "week"
             elif walltime > 12*60:
                 queue = "long"
-            elif walltime > 1:
-                queue = "normal"
             else:
-                queue = "small"
+                queue = "normal"
 
             return queue
 
-        return self.get_default_queue(job)
+        return None
+
+    def get_cub22_cluster_queue(self, walltime: int | None, mem: int | None, gpus: int | None):
+        if walltime < 2*24*60 and gpus == 1:
+            queue = "inference"
+        elif walltime < 7*24*60:
+            queue = "training-normal"
+        else:
+            raise WorkflowError(
+                "There is no queue for jobs that need >7 days to run on cub22."
+            )
+
+        return queue
+
+    def get_tiger22_cluster_queue(self, walltime: int | None, mem: int | None, gpus: int | None):
+        if walltime > 30*24*60:
+            raise WorkflowError(
+                "There is no queue for jobs that need >30 days to run."
+            )
+        elif walltime > 7*24*60:
+            queue = "production"
+        else:
+            queue = "training-normal"
+
+        return queue
 
     def get_project(self):
         """
