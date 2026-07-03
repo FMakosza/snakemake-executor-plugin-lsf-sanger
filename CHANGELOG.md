@@ -1,5 +1,9 @@
 # Changelog
 
+### 1.3.0
+
+* Merged upstream `snakemake-executor-plugin-lsf` changes from version 0.3.3, restoring human-readable `runtime` parameters
+
 ## 1.2.0
 
 * Updated queue selection to match refactoring
