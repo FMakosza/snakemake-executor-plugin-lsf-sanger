@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "snakemake-executor-plugin-lsf-sanger"
-version = "1.3.0"
+version = "1.3.1"
 description = "A Snakemake executor plugin for submitting jobs to the Sanger LSF cluster."
 authors = [
     "Filip Makosza <fm12@sanger.ac.uk>",
