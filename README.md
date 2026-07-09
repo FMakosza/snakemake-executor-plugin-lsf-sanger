@@ -100,16 +100,17 @@ For a LSF cluster, a mapping between Snakemake and LSF needs to be performed.
 
 You can use the following specifications:
 
-| LSF                                | Snakemake        | Description                            |
-|------------------------------------|------------------|----------------------------------------|
-| `-q`                               | `lsf_queue`      | the queue a rule/job is to use         |
-| `--W`                              | `walltime`       | the walltime per job in minutes        |
-| `-R "rusage[mem=<memory_amount>]"` | `mem`, `mem_mb`  | memory a cluster node must provide     |
-|                                    |                  | (`mem`: string with unit, `mem_mb`: i) |
-| `-R "rusage[mem=<memory_amount>]"` | `mem_mb_per_cpu` | memory per reserved CPU                |
-| omit `-R span[hosts=1]`            | `mpi`            | Allow splitting across nodes for MPI   |
-| `-R span[ptile=<ptile>]`           | `ptile`          | Processors per host. Reqires `mpi`     |
-| Other `bsub` arguments             | `lsf_extra`      | Other args to pass to `bsub` (str)     |
+| LSF                                 | Snakemake        | Description                            |
+|-------------------------------------|------------------|----------------------------------------|
+| `-q`                                | `lsf_queue`      | the queue a rule/job is to use         |
+| `--W`                               | `walltime`       | the walltime per job in minutes        |
+| `-R "rusage[mem=<memory_amount>]"`  | `mem`, `mem_mb`  | memory a cluster node must provide     |
+|                                     |                  | (`mem`: string with unit, `mem_mb`: i) |
+| `-R "rusage[mem=<memory_amount>]"`  | `mem_mb_per_cpu` | memory per reserved CPU                |
+| `-R "rusage[ngpus_physical=<gpus>"]`| `gpu`            | GPUs to request for the job            |
+| omit `-R span[hosts=1]`             | `mpi`            | Allow splitting across nodes for MPI   |
+| `-R span[ptile=<ptile>]`            | `ptile`          | Processors per host. Reqires `mpi`     |
+| Other `bsub` arguments              | `lsf_extra`      | Other args to pass to `bsub` (str)     |
 
 
 Each of these can be part of a rule, e.g.:

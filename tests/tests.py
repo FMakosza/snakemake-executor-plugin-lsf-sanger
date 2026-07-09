@@ -7,7 +7,7 @@ class TestWorkflowsBase(snakemake.common.tests.TestWorkflowsLocalStorageBase):
     __test__ = True
 
     def get_executor(self) -> str:
-        return "lsf"
+        return "lsf-sanger"
 
     def get_executor_settings(self) -> Optional[ExecutorSettingsBase]:
         return None
