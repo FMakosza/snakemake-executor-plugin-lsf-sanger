@@ -11,8 +11,8 @@ authors = [
 ]
 readme = "README.md"
 license = "MIT"
-repository = "https://github.com/befh/snakemake-executor-plugin-lsf"
-documentation = "https://snakemake.github.io/snakemake-plugin-catalog/plugins/executor/lsf.html"
+repository = "https://github.com/FMakosza/snakemake-executor-plugin-lsf-sanger"
+documentation = "https://github.com/FMakosza/snakemake-executor-plugin-lsf-sanger/blob/main/README.md"
 keywords = ["snakemake", "plugin", "executor", "cluster", "lsf", "sanger"]
 
 [tool.poetry.dependencies]
