@@ -12,8 +12,80 @@ The following readme is largely preserved from the original LSF executor plugin.
 To use the `lsf-sanger` executor, install the latest release into the same Python environment as Snakemake.
 
 ```
-$ source venv/bin/activate
-(venv) $ pip install https://github.com/FMakosza/snakemake-executor-plugin-lsf-sanger/archive/refs/tags/[VERSION].tar.gz
+$ pip install snakemake-executor-plugin-lsf-sanger
+```
+
+## Workflow Resource Specifications
+
+A workflow rule may support a number of
+[resource specifications](https://snakemake.readthedocs.io/en/latest/snakefiles/rules.html#resources).
+For a LSF cluster, a mapping between Snakemake and LSF needs to be performed.
+
+You can use the following specifications:
+
+| LSF                                 | Snakemake        | Description                            |
+|-------------------------------------|------------------|----------------------------------------|
+| `-q`                                | `lsf_queue`      | the queue a rule/job is to use         |
+| `--W`                               | `walltime`       | the walltime per job in minutes        |
+| `-R "rusage[mem=<memory_amount>]"`  | `mem`, `mem_mb`  | memory a cluster node must provide     |
+|                                     |                  | (`mem`: string with unit, `mem_mb`: i) |
+| `-R "rusage[mem=<memory_amount>]"`  | `mem_mb_per_cpu` | memory per reserved CPU                |
+| `-R "rusage[ngpus_physical=<gpus>"]`| `gpu`            | GPUs to request for the job            |
+| omit `-R span[hosts=1]`             | `mpi`            | Allow splitting across nodes for MPI   |
+| `-R span[ptile=<ptile>]`            | `ptile`          | Processors per host. Reqires `mpi`     |
+| Other `bsub` arguments              | `lsf_extra`      | Other args to pass to `bsub` (str)     |
+
+
+Each of these can be part of a rule, e.g.:
+
+``` python
+rule:
+    input: ...
+    output: ...
+    threads: 2
+    resources:
+        lsf_queue: <queue name>,
+        walltime: <some number>
+```
+
+`walltime` and `runtime` are synonyms.
+
+Please note: as `--mem` and `--mem-per-cpu` are mutually exclusive,
+their corresponding resource flags `mem`/`mem_mb` and
+`mem_mb_per_cpu` are mutually exclusive, too. You can only reserve
+memory a compute node has to provide or the memory required per CPU
+(LSF does not make any distintion between real CPU cores and those
+provided by hyperthreads). The executor will convert the provided options
+based on cluster config.
+
+## Additional custom job configuration
+
+There are various `bsub` options not directly supported via the resource
+definitions shown above. You may use the `lsf_extra` resource to specify
+additional flags to `bsub`:
+
+``` python
+rule myrule:
+    input: ...
+    output: ...
+    resources:
+        lsf_extra="-R a100 -gpu num=2"
+```
+
+You can use [a configuration profile](https://snakemake.readthedocs.io/en/latest/executing/cli.html#profiles) to specify such resources outside of the rule definition.
+
+An example profile may look like this:
+
+```yaml
+jobs: <max concurrent jobs>
+executor: lsf-sanger
+default-resources:
+  - 'lsf_project=<your LSF project>'
+
+set-resources:
+  your_rule_name:
+    walltime: 1000
+    gpu: 2
 ```
 
 ## Specifying Project and Queue
@@ -36,16 +108,6 @@ $ snakemake --executor lsf-sanger --default-resources lsf_project=<your LSF proj
 Usually, it is advisable to persist such settings via a
 [configuration profile](https://snakemake.readthedocs.io/en/latest/executing/cli.html#profiles), which
 can be provided system-wide, per user, and in addition per workflow.
-
-This is an example of the relevant profile settings:
-
-```yaml
-jobs: '<max concurrent jobs>'
-executor: lsf-sanger
-default-resources:
-  - 'lsf_project=<your LSF project>'
-  - 'lsf_queue=<your LSF queue>'
-```
 
 ## Ordinary SMP jobs
 
@@ -91,64 +153,6 @@ rule calc_pi:
 ``` console
 $ snakemake --set-resources calc_pi:mpi="mpiexec" ...
 ```
-
-## Advanced Resource Specifications
-
-A workflow rule may support a number of
-[resource specifications](https://snakemake.readthedocs.io/en/latest/snakefiles/rules.html#resources).
-For a LSF cluster, a mapping between Snakemake and LSF needs to be performed.
-
-You can use the following specifications:
-
-| LSF                                 | Snakemake        | Description                            |
-|-------------------------------------|------------------|----------------------------------------|
-| `-q`                                | `lsf_queue`      | the queue a rule/job is to use         |
-| `--W`                               | `walltime`       | the walltime per job in minutes        |
-| `-R "rusage[mem=<memory_amount>]"`  | `mem`, `mem_mb`  | memory a cluster node must provide     |
-|                                     |                  | (`mem`: string with unit, `mem_mb`: i) |
-| `-R "rusage[mem=<memory_amount>]"`  | `mem_mb_per_cpu` | memory per reserved CPU                |
-| `-R "rusage[ngpus_physical=<gpus>"]`| `gpu`            | GPUs to request for the job            |
-| omit `-R span[hosts=1]`             | `mpi`            | Allow splitting across nodes for MPI   |
-| `-R span[ptile=<ptile>]`            | `ptile`          | Processors per host. Reqires `mpi`     |
-| Other `bsub` arguments              | `lsf_extra`      | Other args to pass to `bsub` (str)     |
-
-
-Each of these can be part of a rule, e.g.:
-
-``` python
-rule:
-    input: ...
-    output: ...
-    resources:
-        lsf_queue: <queue name>
-        walltime: <some number>
-```
-
-`walltime` and `runtime` are synonyms.
-
-Please note: as `--mem` and `--mem-per-cpu` are mutually exclusive,
-their corresponding resource flags `mem`/`mem_mb` and
-`mem_mb_per_cpu` are mutually exclusive, too. You can only reserve
-memory a compute node has to provide or the memory required per CPU
-(LSF does not make any distintion between real CPU cores and those
-provided by hyperthreads). The executor will convert the provided options
-based on cluster config.
-
-## Additional custom job configuration
-
-There are various `bsub` options not directly supported via the resource
-definitions shown above. You may use the `lsf_extra` resource to specify
-additional flags to `bsub`:
-
-``` python
-rule myrule:
-    input: ...
-    output: ...
-    resources:
-        lsf_extra="-R a100 -gpu num=2"
-```
-
-Again, rather use a [profile](https://snakemake.readthedocs.io/en/latest/executing/cli.html#profiles) to specify such resources.
 
 ## Per-job vs per-core
 
