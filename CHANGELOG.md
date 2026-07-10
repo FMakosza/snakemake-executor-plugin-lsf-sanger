@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.2
+
+* Documentation release for PyPI and the Snakemake plugin catalogue
+
 ## 1.3.1
 
 * Package housekeeping to enable publishing to PyPI
