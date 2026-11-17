@@ -473,7 +473,7 @@ class Executor(RemoteExecutor):
                 "No job memory information ('mem_mb' or 'mem_mb_per_cpu') is given "
                 "- submitting without. This might or might not work on your cluster."
             )
-            mem_ = None
+            return None
         return int(mem_)
 
     def get_span(self, job: JobExecutorInterface):
@@ -626,17 +626,17 @@ class Executor(RemoteExecutor):
         return queue
 
     def get_standard_cluster_queue(self, walltime: int | None, mem: int | None, gpus: int | None):
-        if walltime >= 30*24*60: # 30 days in minutes
+        if walltime is not None and walltime >= 30*24*60: # 30 days in minutes
             raise WorkflowError(
                 "There is no queue for jobs that need >30 days to run."
             )
-        if mem > 2250*1000: # 2.25TB in MB
+        if mem is not None and mem > 2250*1000: # 2.25TB in MB
             raise WorkflowError(
                 "There is no queue for jobs that need >2.25 TB."
             )
 
         if gpus:
-            if walltime > 7*24*60:
+            if walltime is not None and walltime > 7*24*60:
                 queue = "gpu-basement"
             else:
                 queue = "gpu"
@@ -771,7 +771,7 @@ class Executor(RemoteExecutor):
                         break
 
         lsf_config["LSF_MEMFMT"] = os.environ.get(
-            "SNAKEMAKE_LSF_MEMFMT", "percpu"
+            "SNAKEMAKE_LSF_MEMFMT", "perjob"
         ).lower()
 
         return lsf_config
