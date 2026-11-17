@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.3
+
+* Fixed crash when either the memory or time resource was not provided
+
 ## 1.3.2
 
 * Documentation release for PyPI and the Snakemake plugin catalogue
